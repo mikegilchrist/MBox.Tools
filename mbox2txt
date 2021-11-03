@@ -85,7 +85,8 @@ def simplify_filename(filename):
 
 def simplify_sender(sender):
     sender = sender.partition(' ')[0]
-    return(sender.replace('"',''))
+    sender = sender.replace(".com", '').replace("no-reply@", '')
+    return(sender.replace('"', ''))
 
 
 def simplify_date(date):
@@ -127,7 +128,8 @@ def write_message(message, i):
         f.write(message_to_text(message))
 
     # Write attachments to folder
-    os.makedirs(fileFolder, exist_ok=True)
+    if message_to_attachments(message) :
+        os.makedirs(fileFolder, exist_ok=True)
     for attachment in message_to_attachments(message):
         attachFilename = (fileFolder + simplify_filename(attachment.get_filename()))
         print("Writing attachment to file " + attachFilename)
