@@ -143,7 +143,7 @@ def main(filename):
     for i, message in enumerate(messages):
         write_message(message, i + 1)
     deleteFlag = input("Remove " + filename +"? (yes/[no])")
-    if(deleteFlag == 'yes' or 'y' or 'Yes'):
+    if(deleteFlag in ['yes' 'y' 'Yes']):
         os.remove(filename)
 
         
