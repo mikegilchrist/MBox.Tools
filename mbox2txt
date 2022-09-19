@@ -80,6 +80,7 @@ def simplify_filename(filename):
 #    filename = filename.replace('[', '') #brackets cause issues with glob
 #    filename = filename.replace(']', '') # no longer using glob
     filename = filename.replace('..', '.')
+    filename = filename.replace('\'', '') 
     return filename.replace('/', '_')
 
 
@@ -144,9 +145,8 @@ def main(filename):
         write_message(message, i + 1)
     deleteFlag = input("Remove " + filename +"? (yes/[no])")
     if(deleteFlag in ['yes' 'y' 'Yes']):
-        os.remove(filename)
+    	os.remove(filename)    
 
-        
 if __name__ == '__main__':
     import sys
     filename = sys.argv[1]
