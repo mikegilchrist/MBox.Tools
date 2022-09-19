@@ -80,6 +80,7 @@ def simplify_filename(filename):
 #    filename = filename.replace('[', '') #brackets cause issues with glob
 #    filename = filename.replace(']', '') # no longer using glob
     filename = filename.replace('..', '.')
+    filename = filename.replace('\'', '') 
     return filename.replace('/', '_')
 
 
@@ -142,9 +143,13 @@ def main(filename):
     messages = read_mbox(filename)
     for i, message in enumerate(messages):
         write_message(message, i + 1)
-    deleteFlag = input("Remove " + filename +"? (yes/[no])")
-    if(deleteFlag == 'yes' or 'y' or 'Yes'):
-        os.remove(filename)
+    # this code doesn't work properly.
+    # filename is always removed
+    # I don't understand why
+    #deleteFlag = input("Remove " + filename +"? (yes/[no])")
+    #print("deleteFlag: ", deleteFlag)
+    #if(deleteFlag == 'yes' or 'y' or 'Yes'):
+    #    os.remove(filename)
 
         
 if __name__ == '__main__':
