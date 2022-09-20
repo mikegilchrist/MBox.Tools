@@ -46,7 +46,8 @@ Subject: {}""".format(message['From'], message['To'], message['Cc'], message['Da
     except AttributeError as err:
         body = '<could not read message: %s>' % str(err)
 
-    return metadata + '\n\n' + body
+    return (metadata + '\n\n' + body).replace('\r','')
+                          
 
 # True IFF the given attachment is worth mentioning.
 #
@@ -74,6 +75,7 @@ def message_attachment_filenames(message):
 def simplify_filename(filename):
     # mikeg: remove annoying spaces and new lines
     filename = filename.replace(',', '')
+    filename = filename.replace('?', '')
     filename = filename.replace('\n','.')
     filename = filename.replace('\t','.')
     filename = filename.replace(' ', '.')
@@ -125,7 +127,7 @@ def write_message(message, i):
 
     fileFolder = os.path.splitext(filename)[0] + "/"
     print("Writing to file " + filename)
-    with open(filename, 'w') as f:
+    with open(filename, 'w', newline=None) as f:
         f.write(message_to_text(message))
 
     # Write attachments to folder
