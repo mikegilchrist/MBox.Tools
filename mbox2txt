@@ -6,9 +6,13 @@
 # - Save 
 
 import email.message
+import email.utils
 import mailbox
 import os
 import glob  #for checking filenames
+import re
+from html.parser import HTMLParser
+from io import StringIO
 
 
 # Just ignore these lines.
@@ -20,6 +24,38 @@ setattr(email.message.Message, 'get_body', email.message.MIMEPart.get_body)
 setattr(email.message.Message, 'is_attachment', email.message.MIMEPart.is_attachment)
 setattr(email.message.Message, 'iter_parts', email.message.MIMEPart.iter_parts)
 setattr(email.message.Message, 'iter_attachments', email.message.MIMEPart.iter_attachments)
+
+# Strip HTML tags and return readable text (no external dependencies)
+class _HTMLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._text = StringIO()
+        self._skip = False
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style'):
+            self._skip = True
+        elif tag in ('br', 'p', 'div', 'tr', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            self._text.write('\n')
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style'):
+            self._skip = False
+    def handle_data(self, data):
+        if not self._skip:
+            self._text.write(data)
+    def get_text(self):
+        return self._text.getvalue()
+
+def strip_html(html):
+    stripper = _HTMLStripper()
+    stripper.feed(html)
+    text = stripper.get_text()
+    # Strip leading/trailing whitespace from each line
+    lines = [line.strip() for line in text.splitlines()]
+    text = '\n'.join(lines)
+    # Collapse runs of blank lines into at most one blank line
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 
 # Reads an mbox from a file and returns a list of messages.
 def read_mbox(filename):
@@ -41,8 +77,16 @@ Subject: {}""".format(message['From'], message['To'], message['Cc'], message['Da
 
     try:
         body_part = message.get_body(('plain',))
-        charset = body_part.get_content_charset() or message.get_content_charset() or 'utf-8'
-        body = body_part.get_payload(decode=True).decode(charset)
+        if body_part is None:
+            body_part = message.get_body(('html',))
+            if body_part is None:
+                body = '<no readable body found>'
+            else:
+                charset = body_part.get_content_charset() or message.get_content_charset() or 'utf-8'
+                body = strip_html(body_part.get_payload(decode=True).decode(charset))
+        else:
+            charset = body_part.get_content_charset() or message.get_content_charset() or 'utf-8'
+            body = body_part.get_payload(decode=True).decode(charset)
     except AttributeError as err:
         body = '<could not read message: %s>' % str(err)
 
@@ -87,9 +131,15 @@ def simplify_filename(filename):
 
 
 def simplify_sender(sender):
-    sender = sender.partition(' ')[0]
-    sender = sender.replace(".com", '').replace("no-reply@", '')
-    return(sender.replace('"', ''))
+    display_name, addr = email.utils.parseaddr(sender)
+    if display_name:
+        return display_name
+    # No display name; extract useful part from email address
+    local, _, domain = addr.partition('@')
+    # Strip common prefixes and TLD from domain
+    domain = re.sub(r'^(no-?reply|info|support|mail|e\.)\.?', '', domain)
+    domain = re.sub(r'\.(com|org|net|edu|io)$', '', domain)
+    return domain if domain else local
 
 
 def simplify_date(date):
