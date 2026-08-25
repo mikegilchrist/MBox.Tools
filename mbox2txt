@@ -113,21 +113,73 @@ def message_attachment_filenames(message):
     return [ a.get_filename() for a in message_to_attachments(message) ]
 
 
+# Characters no filesystem here should be asked to store.  ext4 accepts all of
+# these except '/', but they still have to be quoted in every shell command
+# that touches the file, and NTFS refuses them outright.
+_ILLEGAL_FILENAME_CHARS = r'[<>:"/\\|?*\x00-\x1f]'
+
+# Windows reserves these stems whatever the extension (CON.txt is refused).
+_RESERVED_STEMS = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + ['COM%d' % i for i in range(1, 10)]
+    + ['LPT%d' % i for i in range(1, 10)]
+)
+
+# Longest single filename component ext4 allows is 255 BYTES.  Leave room for
+# the extension the caller appends, and for uniquify()'s "-NN" suffix.
+_MAX_FILENAME_LEN = 180
+
+
 # Converts a filename into something that can be saved on the filesystem.
 #
-# In other words: replaces "/" with "_".
-def simplify_filename(filename):
+# Names are built by the caller as sender_date_subject, so whatever a
+# correspondent put in the Subject line ends up here.  Mail subjects routinely
+# contain ':' (from "Re:" / "CC:"), '"' around display names and '<' '>' around
+# addresses -- this used to handle only  ,  ?  \n  \t  space  ..  '  /  so all
+# of those reached the filesystem verbatim.
+#
+# Three consequences, only one of which is Windows-specific:
+#   - get_filename() returns None for an unnamed attachment, and None.replace()
+#     raised AttributeError, killing the run.
+#   - a long subject could exceed the 255-byte component limit and fail.
+#   - the resulting names could not be created on NTFS at all.
+#
+# The substitution rule is to DROP the offending character and keep the rest
+# verbatim, rather than to substitute punctuation.  Non-ASCII is deliberately
+# left alone: it is legal everywhere and carries meaning.
+def simplify_filename(filename, maxlen=_MAX_FILENAME_LEN):
+    if not filename:
+        return 'untitled'
+
     # mikeg: remove annoying spaces and new lines
     filename = filename.replace(',', '')
-    filename = filename.replace('?', '')
-    filename = filename.replace('\n','.')
-    filename = filename.replace('\t','.')
+    filename = filename.replace('\n', '.')
+    filename = filename.replace('\t', '.')
     filename = filename.replace(' ', '.')
+    filename = filename.replace('\'', '')
 #    filename = filename.replace('[', '') #brackets cause issues with glob
 #    filename = filename.replace(']', '') # no longer using glob
-    filename = filename.replace('..', '.')
-    filename = filename.replace('\'', '') 
-    return filename.replace('/', '_')
+
+    # '?' and '/' were handled singly above; this class covers them and the
+    # rest.  Applied AFTER the space/newline rules so those still win.
+    filename = re.sub(_ILLEGAL_FILENAME_CHARS, '', filename)
+
+    # A single .replace('..', '.') leaves '..' behind in any run of three or
+    # more, which is how '....' survived into exported names.
+    filename = re.sub(r'\.{2,}', '.', filename).strip('.')
+
+    # Trailing '.' or ' ' cannot be stored on NTFS and is invisible elsewhere.
+    filename = filename.rstrip('. ')
+
+    if filename.split('.')[0].upper() in _RESERVED_STEMS:
+        filename = '_' + filename
+
+    if len(filename.encode('utf-8')) > maxlen:
+        while len(filename.encode('utf-8')) > maxlen:
+            filename = filename[:-1]
+        filename = filename.rstrip('. ')
+
+    return filename or 'untitled'
 
 
 def simplify_sender(sender):
